@@ -1,0 +1,13 @@
+tapera*
+
+soybean
+rice
+wheat
+maize
+bean
+results*
+features_culture
+*.csv*
+!all_limited_features.csv
+*.onnx
+*.pkl
