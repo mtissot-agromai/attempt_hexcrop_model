@@ -12,4 +12,5 @@ features_culture
 !predictions_output.csv
 !tapera_limited_features.csv
 *.onnx
+!hexcrop_model_new.onnx
 *.pkl
