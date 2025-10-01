@@ -9,5 +9,7 @@ results*
 features_culture
 *.csv*
 !all_limited_features.csv
+!predictions_output.csv
+!tapera_limited_features.csv
 *.onnx
 *.pkl
