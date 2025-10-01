@@ -5,6 +5,7 @@ rice
 wheat
 maize
 bean
+models
 results*
 features_culture
 *.csv*
