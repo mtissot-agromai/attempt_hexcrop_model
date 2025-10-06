@@ -9,7 +9,7 @@ from skl2onnx import convert_sklearn
 from skl2onnx.common.data_types import FloatTensorType
 
 import numpy as np
-import sys, os
+import sys, os, argparse
 
 from itertools import combinations
 
@@ -38,7 +38,7 @@ def train_single_model(df: pd.DataFrame, cult1: str, cult2: str, model_path: str
     X = df_cult.drop(columns=["filename", "culture", "year", "season"])
     y = df_cult['culture']
 
-    model_name = f"{model_path}/{cult1}_{cult2}.onnx"
+    model_name = f"{cult1}_{cult2}.onnx"
 
     r_state = 264284 # escolhe oq quiser, mas grava o valor p manter reproducibilidade
 
@@ -80,8 +80,10 @@ def train_single_model(df: pd.DataFrame, cult1: str, cult2: str, model_path: str
 
     if model_path:
         os.makedirs(model_path, exist_ok=True)
-        with open(model_name, "wb") as f:
+        with open(f"{model_path}/{model_name}", "wb") as f:
             f.write(onnx_model.SerializeToString())
+
+    logger.info(f"Saved model to {model_path}/{model_name}")
 
     y_pred = pipeline_forced.predict(X_test)
 
@@ -119,6 +121,7 @@ def train_single_model(df: pd.DataFrame, cult1: str, cult2: str, model_path: str
     if save_csv:
         os.makedirs(f"{model_path}/csvs/", exist_ok=True)
         final_df.to_csv(f"{model_path}/csvs/check_{cult1}_{cult2}.csv", index=False)
+        logger.info(f"Saved CSV to {model_path}/csvs/check_{cult1}_{cult2}.csv")
 
 def train_general_model(df: pd.DataFrame, model_path: str, save_csv: bool = True):
     logger.info(f"Beginning training of general model")
@@ -126,7 +129,7 @@ def train_general_model(df: pd.DataFrame, model_path: str, save_csv: bool = True
     X = df_cult.drop(columns=["filename", "culture", "year", "season"])
     y = df_cult['culture']
 
-    model_name = f"{model_path}/general_model.onnx"
+    model_name = f"general_model.onnx"
 
     r_state = 264284 # escolhe oq quiser, mas grava o valor p manter reproducibilidade
 
@@ -136,7 +139,7 @@ def train_general_model(df: pd.DataFrame, model_path: str, save_csv: bool = True
 
     all_features = X_train.columns.tolist()
 
-    features_for_selection_indices = list(range(1, len(all_features))) 
+    features_for_selection_indices = list(range(0, len(all_features))) 
 
     feature_selector = SelectFromModel(
         estimator=RandomForestClassifier(n_estimators=100, random_state=r_state),
@@ -145,33 +148,32 @@ def train_general_model(df: pd.DataFrame, model_path: str, save_csv: bool = True
 
     preprocessor = ColumnTransformer(
         transformers=[
-            ("force_feature", "passthrough", [0]), 
-            
             ("select_features", feature_selector, features_for_selection_indices)
         ]
     )
 
-    pipeline_forced = Pipeline([
-        ("feature_selection_forced", preprocessor),  
+    pipeline = Pipeline([
+        ("feature_selection", preprocessor),  
         ("clf", RandomForestClassifier(n_estimators=150, random_state=r_state))
     ])
 
-    pipeline_forced.fit(X_train, y_train) 
+    pipeline.fit(X_train, y_train) 
 
     initial_type = [('input', FloatTensorType([None, X_train.shape[1]]))]
 
-    onnx_model = convert_sklearn(pipeline_forced, initial_types=initial_type)
+    onnx_model = convert_sklearn(pipeline, initial_types=initial_type)
 
     if model_path:
         os.makedirs(model_path, exist_ok=True)
-        with open(model_name, "wb") as f:
+        with open(f"{model_path}/{model_name}", "wb") as f:
             f.write(onnx_model.SerializeToString())
+    logger.info(f"Saved model to {model_path}/{model_name}")
 
-    y_pred = pipeline_forced.predict(X_test)
+    y_pred = pipeline.predict(X_test)
 
-    probabilities = pipeline_forced.predict_proba(X_test)
+    probabilities = pipeline.predict_proba(X_test)
 
-    model_classes = pipeline_forced.classes_
+    model_classes = pipeline.classes_
 
     results_df = pd.DataFrame(index=X_test.index)
     results_df['Actual_Culture'] = y_test
@@ -192,33 +194,91 @@ def train_general_model(df: pd.DataFrame, model_path: str, save_csv: bool = True
     final_df = results_df.join(probabilities_df)
 
     cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=r_state)
-    scores = cross_val_score(pipeline_forced, X, y, cv=cv, scoring="accuracy")
+    scores = cross_val_score(pipeline, X, y, cv=cv, scoring="accuracy")
 
     final_df['Avg Accuracy'] = scores.mean()
 
     if save_csv:
         os.makedirs(f"{model_path}/csvs/", exist_ok=True)
         final_df.to_csv(f"{model_path}/csvs/check_general.csv", index=False)
+        logger.info(f"Saved CSV to {model_path}/csvs/check_general.csv")
 
-parent_path = '.'
+def main(args):
+    parser = argparse.ArgumentParser(description="Training Hexcrop models.")
 
-features_df = pd.read_csv(f"{parent_path}/training_dataset.csv")
+    parser.add_argument("--unique", type=str, nargs=2, help="If you want to train a unique model at a time")
 
-# ! OPCIONAL: DROPAR TRIGO
-if 'wheat' in list(features_df['culture'].unique()):
-    features_df = features_df[features_df['culture'] != 'wheat']
-# !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    parser.add_argument("--general",
+                        action='store_true',
+                        dest='TRAIN_GENERAL_MODEL',
+                        default=False,
+                        help="If you want to train the general model")
 
-CULTURES = list(features_df['culture'].unique())
+    parser.add_argument("--doubles",
+                        action='store_true',
+                        dest='TRAIN_ALL_CULTURES',
+                        default=False,
+                        help="If you want to train all 2-culture models")
 
-print(CULTURES)
+    parser.add_argument("--nocsv", 
+                        action='store_false',
+                        dest='SAVE_CSV',
+                        default=True,
+                        help='Do not save the CSV checking file')
+    
+    parser.add_argument("--output", nargs=1, type=str, help='The path to save the models.')
 
-culture_combos = list(combinations(CULTURES, 2))
+    args = parser.parse_args()
 
-for cult1, cult2 in culture_combos:
-    train_single_model(features_df, cult1, cult2, f"{parent_path}/models")
+    GENERAL = args.TRAIN_GENERAL_MODEL
+    TRAIN_ALL_CULTURES = args.TRAIN_ALL_CULTURES
+    SAVE_CSV = args.SAVE_CSV
 
-train_general_model(features_df, f"{parent_path}/models")
+    OUTPUT_PATH='models'
 
+    UNIQUE_CULTURES = []
 
+    if args.unique:
+        UNIQUE_CULTURES = [x.lower() for x in sorted(args.unique)]
+        GENERAL=False
+        TRAIN_ALL_CULTURES=False
+
+    if args.output:
+        OUTPUT_PATH=args.output[0]
+
+    PARENT_PATH = '.'
+
+    features_df = pd.read_csv(f"{PARENT_PATH}/training_dataset.csv")
+
+    # ! OPCIONAL: DROPAR TRIGO
+    if 'wheat' in list(features_df['culture'].unique()):
+        features_df = features_df[features_df['culture'] != 'wheat']
+    # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+    CULTURES = sorted(list(features_df['culture'].unique()))
+
+    if UNIQUE_CULTURES:
+        for cult in UNIQUE_CULTURES:
+            if cult not in CULTURES:
+                logger.error(f"You entered culture {cult}, which does not exist on dataframe['cultures'].")
+                sys.exit(1)
+        print("\n====================")
+        culture_combos = list(combinations(UNIQUE_CULTURES, 2))
+        for cult1, cult2 in culture_combos:
+            train_single_model(features_df, cult1, cult2, f"{PARENT_PATH}/{OUTPUT_PATH}", save_csv=SAVE_CSV)
+
+    if TRAIN_ALL_CULTURES:
+        print("\n====================")
+        culture_combos = list(combinations(CULTURES, 2))
+        for cult1, cult2 in culture_combos:
+            train_single_model(features_df, cult1, cult2, f"{PARENT_PATH}/{OUTPUT_PATH}", save_csv=SAVE_CSV)
+
+    if GENERAL:
+        print("\n====================")
+        train_general_model(features_df, f"{PARENT_PATH}/{OUTPUT_PATH}", save_csv=SAVE_CSV)
+    
+    pass
+
+if __name__ == "__main__":
+    main(sys.argv)
 

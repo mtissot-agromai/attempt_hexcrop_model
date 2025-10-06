@@ -4,7 +4,7 @@ import onnxruntime as rt
 from itertools import combinations
 from typing import Dict, Tuple, List, Any
 
-import logging, sys
+import logging, sys, os, argparse
 logger = logging.getLogger()
 logger.setLevel(logging.DEBUG)
 
@@ -29,7 +29,7 @@ def create_pairwise_model_map(cultures: List[str], models_path: str) -> Dict[Tup
     model_map = {}
     
     for cult1, cult2 in combinations(sorted(cultures), 2):
-        filename = f"{models_path}/{cult1}_{cult2}.onnx"
+        filename = f"{cult1}_{cult2}.onnx"
         
         model_map[(cult1, cult2)] = filename
         model_map[(cult2, cult1)] = filename
@@ -51,21 +51,21 @@ def predict_single_case(
     return session.run(None, input_feed)
 
 def run_cascading_prediction(
-    new_data_path: str,
-    general_model_path: str,
+    new_data_df: pd.DataFrame,
+    models_path: str,
     full_feature_list: List[str],
     class_list: List[str],
-    SAVE: bool = False
+    PAIRWISE_MODEL_MAP: List[Tuple[str, str]]
 ) -> pd.DataFrame:
     
-    try:
-        new_data = pd.read_csv(new_data_path, index_col=0)
-    except FileNotFoundError:
-        logger.error(f"Error: Data file not found at {new_data_path}")
-        return pd.DataFrame()
+    if not new_data_df.empty:
+        new_data = new_data_df.copy()
+    else:
+         logger.error(f"Dataframe is empty. Exiting now")
+         sys.exit(1)
 
     try:
-        general_sess = rt.InferenceSession(f"{general_model_path}/general_model.onnx")
+        general_sess = rt.InferenceSession(f"{models_path}/general_model.onnx")
     except Exception as e:
         logger.error(f"Error loading general model: {e}")
         return pd.DataFrame()
@@ -98,9 +98,9 @@ def run_cascading_prediction(
             continue
 
         try:
-            pairwise_sess = rt.InferenceSession(model_file)
+            pairwise_sess = rt.InferenceSession(f"{models_path}/{model_file}")
         except Exception:
-            logger.warning(f"Warning: Could not load pairwise model {model_file}. Skipping sample.")
+            logger.warning(f"Warning: Could not load pairwise model {models_path}/{model_file}. Skipping sample.")
             final_pred = cult_A
             final_prob = general_probs[top_2_indices[0]]
             pairwise_model_used = f'{model_file}_LoadError'
@@ -145,31 +145,145 @@ def run_cascading_prediction(
 
     return pd.DataFrame(final_predictions).set_index('Index')
 
-models_path = "./models"
-output_path = "./result_multimodel.csv"
-data_to_predict_path = "./validation_dataset.csv"
+def run_binary_prediction(
+    new_data_df: pd.DataFrame,
+    models_path: str,
+    full_feature_list: List[str],
+    class_list: List[str],
+    PAIRWISE_MODEL_MAP: List[Tuple[str, str]],
+) -> pd.DataFrame:
+    
+    if not new_data_df.empty:
+        new_data = new_data_df.copy()
+    else:
+         logger.error(f"Dataframe is empty. Exiting now")
+         sys.exit(1)
 
-df = pd.read_csv(data_to_predict_path)
+    cult_A = class_list[0]
+    cult_B = class_list[1]
 
-# " IF YOU DROPPED WHEAT FROM THE THING BEFORE, DROP HERE TOO"
-if 'wheat' in list(df['culture'].unique()):
-    df = df[df['culture'] != 'wheat']
-# !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!1
+    model_file = PAIRWISE_MODEL_MAP[(cult_A, cult_B)]
 
-CULTURES_LIST = list(df['culture'].unique())
+    try:
+        session = rt.InferenceSession(f"{models_path}/{model_file}")
+    except Exception as e:
+        logger.error(f"Error loading general model: {e}")
+        return pd.DataFrame()
 
-df = df.drop(columns=["filename", "culture", "year", "season"])
+    final_predictions = []
 
-GENERAL_MODEL_FEATURES = list(df.columns)
-del df
+    for index, sample_data in new_data.iterrows():
+        _, general_probs_list = predict_single_case(session, full_feature_list, sample_data)
+        
+        general_probs_dict = general_probs_list[0]
 
-PAIRWISE_MODEL_MAP = create_pairwise_model_map(CULTURES_LIST, models_path)
+        general_probs = np.array([general_probs_dict[c] for c in class_list])
 
-final_results_df = run_cascading_prediction(
-    data_to_predict_path, 
-    models_path, 
-    GENERAL_MODEL_FEATURES, 
-    CULTURES_LIST
-)
+        top_2_indices = np.argsort(general_probs)[::-1][:2]
+        
+        cult_A = class_list[top_2_indices[0]]
+        cult_B = class_list[top_2_indices[1]]
 
-final_results_df.to_csv(f"{output_path}")
+        prob_A_culture = general_probs_dict[cult_A]
+        prob_B_culture = general_probs_dict[cult_B]
+
+        if prob_A_culture > prob_B_culture:
+            final_pred = cult_A
+            final_prob = prob_A_culture
+        else:
+            final_pred = cult_B
+            final_prob = prob_B_culture
+        
+        final_predictions.append({
+            'Index': index,
+            f'Prob_{cult_A}': prob_A_culture,
+            f'Prob_{cult_B}': prob_B_culture,
+            
+            'Final_Prediction': final_pred,
+            'Final_Confidence': final_prob
+        })
+
+    return pd.DataFrame(final_predictions).set_index('Index')
+
+def main(args):
+    parser = argparse.ArgumentParser(description="Predicting using Hexcrop models.")
+
+    parser.add_argument("--input", nargs=1, type=str, help='The path to the CSV with features to predict')
+
+    parser.add_argument("--unique", type=str, nargs=2, help="If you want to predict using one specific model, instead of cascading prediction")
+    
+    parser.add_argument("--output", nargs=1, type=str, help='The path to save the results.')
+
+    parser.add_argument("--models", nargs=1, type=str, help='The path to load the models from.')
+
+    args = parser.parse_args()
+
+    OUTPUT_PATH = "."
+
+    INPUT_FILE = 'validation_dataset.csv'
+
+    UNIQUE_CULTURES = []
+    RUN_SINGLE_PREDICTION = False
+
+    MODELS_PATH = "models"
+
+    if args.input:
+        INPUT_FILE = args.input[0]
+
+    if args.unique:
+        UNIQUE_CULTURES = [x.lower() for x in sorted(args.unique)]
+        culture1, culture2 = UNIQUE_CULTURES
+        RUN_SINGLE_PREDICTION = True
+
+    if args.output:
+        OUTPUT_PATH=args.output[0]
+
+    if args.models:
+        MODELS_PATH = args.models[0]
+
+    try:
+        data_to_predict_df = pd.read_csv(INPUT_FILE)
+    except FileNotFoundError:
+        logger.error(f"Error: Data file not found at {INPUT_FILE}")
+        return pd.DataFrame()
+
+    if 'wheat' in list(data_to_predict_df['culture'].unique()):
+        data_to_predict_df = data_to_predict_df[data_to_predict_df['culture'] != 'wheat']
+
+    CULTURES_LIST = list(data_to_predict_df['culture'].unique())
+
+    PAIRWISE_MODEL_MAP = create_pairwise_model_map(CULTURES_LIST, MODELS_PATH)
+
+    if RUN_SINGLE_PREDICTION:
+
+        data_to_predict_df = data_to_predict_df[data_to_predict_df['culture'].isin(UNIQUE_CULTURES)]
+        cultures_column = data_to_predict_df['culture']
+        data_to_predict_df.drop(columns=['filename', 'year', 'season', 'culture'], inplace=True)
+
+        GENERAL_MODEL_FEATURES = list(data_to_predict_df.columns)
+
+        final_results_df = run_binary_prediction(data_to_predict_df,
+            MODELS_PATH,
+            GENERAL_MODEL_FEATURES,
+            UNIQUE_CULTURES,
+            PAIRWISE_MODEL_MAP
+        )
+        final_results_df['culture'] = cultures_column
+        final_results_df.to_csv(f"{OUTPUT_PATH}/results_{culture1}_{culture2}.csv")
+    else:
+        cultures_column = data_to_predict_df['culture']
+        data_to_predict_df.drop(columns=['filename', 'year', 'season', 'culture'], inplace=True)
+
+        GENERAL_MODEL_FEATURES = list(data_to_predict_df.columns)
+        final_results_df = run_cascading_prediction(
+            data_to_predict_df,
+            MODELS_PATH,
+            GENERAL_MODEL_FEATURES,
+            CULTURES_LIST,
+            PAIRWISE_MODEL_MAP
+        )
+        final_results_df['culture'] = cultures_column
+        final_results_df.to_csv(f"{OUTPUT_PATH}/results_cascading.csv")
+
+if __name__ == "__main__":
+    main(sys.argv)

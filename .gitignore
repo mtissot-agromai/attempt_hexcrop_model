@@ -1,5 +1,3 @@
-tapera*
-
 soybean
 rice
 wheat
@@ -8,10 +6,5 @@ bean
 models
 results*
 features_culture
-*.csv*
-!all_limited_features.csv
-!predictions_output.csv
-!tapera_limited_features.csv
-*.onnx
-!hexcrop_model_new.onnx
-*.pkl
+*.log
+*.csv
