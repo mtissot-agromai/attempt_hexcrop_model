@@ -52,9 +52,12 @@ def train_single_model(df: pd.DataFrame, cult1: str, cult2: str, model_path: str
 
     logger.info(f"Selecting best features")
 
+    max_features = [25, 50, 75, 100, 125, 150, 175, 200, 225, 250, 275, 300]
+    # 84.5, 83.6, 84.5, 83.7, 85.3, 85.7, 84.4, 83.6, 84.4, 84.0, 84.48
+
     feature_selector = SelectFromModel(
-        estimator=RandomForestClassifier(n_estimators=100, random_state=r_state),
-        max_features=100 
+        estimator=RandomForestClassifier(n_estimators=150, random_state=r_state),
+        max_features=max_features[5]
     )
 
     preprocessor = ColumnTransformer(
@@ -67,7 +70,7 @@ def train_single_model(df: pd.DataFrame, cult1: str, cult2: str, model_path: str
 
     pipeline_forced = Pipeline([
         ("feature_selection_forced", preprocessor),  
-        ("clf", RandomForestClassifier(n_estimators=150, random_state=r_state))
+        ("clf", RandomForestClassifier(n_estimators=250, random_state=r_state))
     ])
 
     logger.info(f"Fitting the data")

@@ -3,7 +3,8 @@ rice
 wheat
 maize
 bean
-models
+models/
+models*/
 results*
 features_culture
 *.log

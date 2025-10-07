@@ -237,6 +237,7 @@ def main(args):
 
     if args.output:
         OUTPUT_PATH=args.output[0]
+        os.makedirs(OUTPUT_PATH, exist_ok=True)
 
     if args.models:
         MODELS_PATH = args.models[0]
@@ -269,6 +270,7 @@ def main(args):
             PAIRWISE_MODEL_MAP
         )
         final_results_df['culture'] = cultures_column
+        final_results_df['result'] = (final_results_df['Final_Prediction'] == final_results_df['culture']).astype(int)
         final_results_df.to_csv(f"{OUTPUT_PATH}/results_{culture1}_{culture2}.csv")
     else:
         cultures_column = data_to_predict_df['culture']
@@ -283,6 +285,7 @@ def main(args):
             PAIRWISE_MODEL_MAP
         )
         final_results_df['culture'] = cultures_column
+        final_results_df['result'] = (final_results_df['Final_Prediction'] == final_results_df['culture']).astype(int)
         final_results_df.to_csv(f"{OUTPUT_PATH}/results_cascading.csv")
 
 if __name__ == "__main__":
