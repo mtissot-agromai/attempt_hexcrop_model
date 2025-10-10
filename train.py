@@ -31,6 +31,22 @@ logger.handlers = []
 logger.addHandler(stdout_handler)
 logger.addHandler(error_file_handler)
 
+def save_feature_importance(pipeline: Pipeline, preprocessor: ColumnTransformer, PATH: str, FILENAME: str):
+    final_classifier = pipeline.named_steps["clf"]
+    importances_final = final_classifier.feature_importances_
+
+    preprocessor = pipeline.named_steps["feature_selection_forced"]
+
+    output_features = preprocessor.get_feature_names_out()
+
+    selected_feature_names = [f.split('__')[-1] for f in output_features]
+
+    feature_importances_series = pd.Series(importances_final, index=selected_feature_names)
+
+    top_features = feature_importances_series.sort_values(ascending=False)
+
+    top_features.to_csv(f"{PATH}/{FILENAME}", index=True, header=['Importance'], index_label='Feature')
+
 def train_single_model(df: pd.DataFrame, cult1: str, cult2: str, model_path: str, save_csv: bool = True):
     logger.info(f"Beginning training of single model for cultures {cult1} and {cult2}")
     df_cult = df.copy()
@@ -68,18 +84,20 @@ def train_single_model(df: pd.DataFrame, cult1: str, cult2: str, model_path: str
         ]
     )
 
-    pipeline_forced = Pipeline([
+    pipeline = Pipeline([
         ("feature_selection_forced", preprocessor),  
         ("clf", RandomForestClassifier(n_estimators=250, random_state=r_state))
     ])
 
     logger.info(f"Fitting the data")
 
-    pipeline_forced.fit(X_train, y_train) 
+    pipeline.fit(X_train, y_train) 
+
+    save_feature_importance(pipeline, preprocessor, model_path, f"{cult1}_{cult2}_feature_importance.csv")
 
     initial_type = [('input', FloatTensorType([None, X_train.shape[1]]))]
 
-    onnx_model = convert_sklearn(pipeline_forced, initial_types=initial_type)
+    onnx_model = convert_sklearn(pipeline, initial_types=initial_type)
 
     if model_path:
         os.makedirs(model_path, exist_ok=True)
@@ -88,11 +106,11 @@ def train_single_model(df: pd.DataFrame, cult1: str, cult2: str, model_path: str
 
     logger.info(f"Saved model to {model_path}/{model_name}")
 
-    y_pred = pipeline_forced.predict(X_test)
+    y_pred = pipeline.predict(X_test)
 
-    probabilities = pipeline_forced.predict_proba(X_test)
+    probabilities = pipeline.predict_proba(X_test)
 
-    model_classes = pipeline_forced.classes_
+    model_classes = pipeline.classes_
 
     results_df = pd.DataFrame(index=X_test.index)
     results_df['Actual_Culture'] = y_test
@@ -113,7 +131,7 @@ def train_single_model(df: pd.DataFrame, cult1: str, cult2: str, model_path: str
     final_df = results_df.join(probabilities_df)
 
     cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=r_state)
-    scores = cross_val_score(pipeline_forced, X, y, cv=cv, scoring="accuracy")
+    scores = cross_val_score(pipeline, X, y, cv=cv, scoring="accuracy")
 
     logger.info(f"Accuracy per fold: {scores}")
     logger.info(f"Average accuracy: {scores.mean()}")
@@ -156,11 +174,13 @@ def train_general_model(df: pd.DataFrame, model_path: str, save_csv: bool = True
     )
 
     pipeline = Pipeline([
-        ("feature_selection", preprocessor),  
+        ("feature_selection_forced", preprocessor),  
         ("clf", RandomForestClassifier(n_estimators=150, random_state=r_state))
     ])
 
     pipeline.fit(X_train, y_train) 
+
+    save_feature_importance(pipeline, preprocessor, model_path, f"general_feature_importance.csv")
 
     initial_type = [('input', FloatTensorType([None, X_train.shape[1]]))]
 
@@ -231,6 +251,8 @@ def main(args):
     
     parser.add_argument("--output", nargs=1, type=str, help='The path to save the models.')
 
+    parser.add_argument("--input", nargs=1, type=str, help='The path to the training dataset.')
+
     args = parser.parse_args()
 
     GENERAL = args.TRAIN_GENERAL_MODEL
@@ -241,17 +263,23 @@ def main(args):
 
     UNIQUE_CULTURES = []
 
+    INPUT_PATH = "."
+
     if args.unique:
-        UNIQUE_CULTURES = [x.lower() for x in sorted(args.unique)]
+        lower = [un.lower() for un in args.unique]
+        UNIQUE_CULTURES = [x.lower() for x in sorted(lower)]
         GENERAL=False
         TRAIN_ALL_CULTURES=False
 
     if args.output:
         OUTPUT_PATH=args.output[0]
 
+    if args.input:
+        INPUT_PATH = args.input[0]
+
     PARENT_PATH = '.'
 
-    features_df = pd.read_csv(f"{PARENT_PATH}/training_dataset.csv")
+    features_df = pd.read_csv(f"{INPUT_PATH}/training_dataset.csv")
 
     # ! OPCIONAL: DROPAR TRIGO
     if 'wheat' in list(features_df['culture'].unique()):
