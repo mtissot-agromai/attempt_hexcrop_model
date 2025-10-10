@@ -1,7 +1,6 @@
 import pandas as pd
-import os
 from itertools import combinations
-import logging, sys
+import logging, os, sys, argparse
 from utils import extract_all_features
 from tqdm import tqdm
 
@@ -24,7 +23,18 @@ logger.addHandler(error_file_handler)
 
 def calculate_features(input_folder: str):
     logger.info(f"Calculating all features from all files in 'limited' folders")
-    data_columns = ["B1", "B2", "B3", "B4", "B5", "B6", "B7", "B8", "B8A", "B9", "B11", "B12", "EVI2", "B1/B11", "B1/B12", "B1/B2", "B1/B3", "B1/B4", "B1/B5", "B1/B6", "B1/B7", "B1/B8", "B1/B9", "B11/B12", "B11/B2", "B11/B3", "B11/B4", "B11/B5", "B11/B6", "B11/B7", "B11/B8", "B11/B9", "B12/B2", "B12/B3", "B12/B4", "B12/B5", "B12/B6", "B12/B7", "B12/B8", "B12/B9", "B2/B3", "B2/B4", "B2/B5", "B2/B6", "B2/B7", "B2/B8", "B2/B9", "B3/B4", "B3/B5", "B3/B6", "B3/B7", "B3/B8", "B3/B9", "B4/B5", "B4/B6", "B4/B7", "B4/B8", "B4/B9", "B5/B6", "B5/B7", "B5/B8", "B5/B9", "B6/B7", "B6/B8", "B6/B9", "B7/B8", "B7/B9", "B8/B9"]
+    data_columns = ['B1', 'B11', 'B12', 'B2', 'B3', 'B4', 'B5', 'B6', 'B7', 'B8',
+       'B8A', 'B9', 'EVI2', 'B1/B11', 'B1/B12', 'B1/B2', 'B1/B3', 'B1/B4',
+       'B1/B5', 'B1/B6', 'B1/B7', 'B1/B8', 'B1/B8A', 'B1/B9', 'B11/B12',
+       'B11/B2', 'B11/B3', 'B11/B4', 'B11/B5', 'B11/B6', 'B11/B7', 'B11/B8',
+       'B11/B8A', 'B11/B9', 'B12/B2', 'B12/B3', 'B12/B4', 'B12/B5', 'B12/B6',
+       'B12/B7', 'B12/B8', 'B12/B8A', 'B12/B9', 'B2/B3', 'B2/B4', 'B2/B5',
+       'B2/B6', 'B2/B7', 'B2/B8', 'B2/B8A', 'B2/B9', 'B3/B4', 'B3/B5', 'B3/B6',
+       'B3/B7', 'B3/B8', 'B3/B8A', 'B3/B9', 'B4/B5', 'B4/B6', 'B4/B7', 'B4/B8',
+       'B4/B8A', 'B4/B9', 'B5/B6', 'B5/B7', 'B5/B8', 'B5/B8A', 'B5/B9',
+       'B6/B7', 'B6/B8', 'B6/B8A', 'B6/B9', 'B7/B8', 'B7/B8A', 'B7/B9',
+       'B8/B8A', 'B8/B9', 'B8A/B9']
+    # data_columns = ["B1", "B2", "B3", "B4", "B5", "B6", "B7", "B8", "B8A", "B9", "B11", "B12", "EVI2", "B1/B11", "B1/B12", "B1/B2", "B1/B3", "B1/B4", "B1/B5", "B1/B6", "B1/B7", "B1/B8", "B1/B9", "B11/B12", "B11/B2", "B11/B3", "B11/B4", "B11/B5", "B11/B6", "B11/B7", "B11/B8", "B11/B9", "B12/B2", "B12/B3", "B12/B4", "B12/B5", "B12/B6", "B12/B7", "B12/B8", "B12/B9", "B2/B3", "B2/B4", "B2/B5", "B2/B6", "B2/B7", "B2/B8", "B2/B9", "B3/B4", "B3/B5", "B3/B6", "B3/B7", "B3/B8", "B3/B9", "B4/B5", "B4/B6", "B4/B7", "B4/B8", "B4/B9", "B5/B6", "B5/B7", "B5/B8", "B5/B9", "B6/B7", "B6/B8", "B6/B9", "B7/B8", "B7/B9", "B8/B9"]
     all_feature_rows = []
 
     for root, dirs, files in os.walk(input_folder):
@@ -81,7 +91,7 @@ def calculate_bx_ratios(filepath: str, rewrite: bool = True):
         df = pd.read_csv(filepath)
         print(f"Calculating ratios for: {filepath}")
 
-        bx_cols = sorted([col for col in df.columns if col.startswith('B') and col[1:].isdigit()])
+        bx_cols = sorted([col for col in df.columns if (col.startswith('B') and col[1:].isdigit()) or col=='B8A'])
         
         if not bx_cols:
             logger.warning(f"Warning: No 'BX' columns found in {filepath}. Skipping.")
@@ -106,15 +116,12 @@ def calculate_bx_ratios(filepath: str, rewrite: bool = True):
     except Exception as e:
         print(f"Error processing {filepath}: {e}")
 
-
 def add_indices_to_csvs(input_folder, rewrite: bool = True):
     for root, _, files in os.walk(input_folder):
         for file in files:
-            if file.endswith('.csv') and file[0:2]=='id':
+            if file.endswith('.csv'):
                 filepath = os.path.join(root, file)
-                calculate_bx_ratios(filepath)
-
-    
+                calculate_bx_ratios(filepath, rewrite)
 
 def create_dataset(input_folder: str, output_path: str, rewrite: bool = True):
     if os.path.exists(input_folder):
@@ -127,9 +134,11 @@ def create_dataset(input_folder: str, output_path: str, rewrite: bool = True):
     if not features_df.empty:
         features_df.to_csv(output_path, index=False)
 
+    features_df.to_csv(output_path, index=False)
+
     return features_df
 
-def split_dataset(df: pd.DataFrame, output_path: str, pct: float = 0.2):
+def split_dataset(df: pd.DataFrame, output_path: str, pct: float):
     try:
         len_original = len(df)
 
@@ -159,7 +168,53 @@ def split_dataset(df: pd.DataFrame, output_path: str, pct: float = 0.2):
         print(f"Erro :( {e}")
     pass
 
-output_path = "."
-full_features = create_dataset(output_path, f"{output_path}/full_dataset_features.csv", True)
-split_dataset(full_features, output_path, 0.2)
+def main(args):
+    parser = argparse.ArgumentParser(description="Creating dataset for Hexcrop models.")
 
+    parser.add_argument("--nosplit", 
+                        action='store_true',
+                        dest='SPLIT_DATASET',
+                        default=True,
+                        help='Do not split the dataset into training and validation datasets')
+    
+    parser.add_argument("--split", nargs=1, type=float, help='The proportion for the velidation dataset')
+    
+    parser.add_argument("--output", nargs=1, type=str, help='The path to save the dataset(s).')
+
+    parser.add_argument("--input", nargs=1, type=str, help='The path to input folder.')
+
+    args = parser.parse_args()
+
+
+    # ========== Parsing arguments ==========
+    SPLIT_DATASET = args.SPLIT_DATASET
+
+    OUTPUT_PATH='.'
+    if args.output:
+        OUTPUT_PATH=args.output[0]
+        os.makedirs(OUTPUT_PATH, exist_ok=True)
+
+    INPUT_FOLDER = "culture_data"
+    if args.input:
+        INPUT_FOLDER = args.input[0]
+
+    VALIDATION_PROPORTION = 0.2
+    if args.split:
+        VALIDATION_PROPORTION = args.split[0]
+        if VALIDATION_PROPORTION < 0:
+            print(f"This is a proportion. It should be between 0 and 1. {VALIDATION_PROPORTION} is less than 0. Default to 0.2")
+            VALIDATION_PROPORTION = 0.2
+        if VALIDATION_PROPORTION > 1:
+            print(f"This is a proportion. It should be between 0 and 1. {VALIDATION_PROPORTION} is bigger than 1. Defaulting to 0.2")
+            VALIDATION_PROPORTION = 0.2
+
+    FILENAME = "full_feature_dataset.csv"
+    # ======================================
+
+    full_features = create_dataset(INPUT_FOLDER, f"{OUTPUT_PATH}/{FILENAME}.csv", True)
+
+    if SPLIT_DATASET:
+        split_dataset(full_features, OUTPUT_PATH, VALIDATION_PROPORTION)
+
+if __name__ == "__main__":
+    main(sys.argv)
