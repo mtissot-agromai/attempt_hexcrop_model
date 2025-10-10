@@ -205,6 +205,41 @@ def run_binary_prediction(
 
     return pd.DataFrame(final_predictions).set_index('Index')
 
+def write_summary(df: pd.DataFrame, output_path: str, filename: str):
+        global_percent = df['result'].mean() * 100
+
+        culture_summary = (
+            df.groupby('culture')['result']
+            .mean()
+            .mul(100)
+            .sort_values(ascending=False)
+        )
+        culture_summary_text = ""
+        for culture, percent in culture_summary.items():
+            culture_summary_text += f"Culture {culture}: {percent:.2f}%\n"
+
+        summary_content = f"""
+--- Prediction Summary Report ---
+
+Overall Classification Success (Result == 1)
+
+Total Instances: {len(df)}
+
+Overall Success Percentage: {global_percent:.2f}%
+
+---------------------------------------------------
+
+## Success Rate by Culture Group
+
+{culture_summary_text}
+---------------------------------------------------
+        """
+
+        with open(f"{output_path}/{filename}", "w") as f:
+            f.write(summary_content)
+
+        print(f"Summary generated and saved to {output_path}/{filename}.txt")
+
 def main(args):
     parser = argparse.ArgumentParser(description="Predicting using Hexcrop models.")
 
@@ -218,32 +253,32 @@ def main(args):
 
     args = parser.parse_args()
 
-    OUTPUT_PATH = "."
-
+    # ==================== Parsing arguments ========================
+    INPUT_PATH = "."
     INPUT_FILE = 'validation_dataset.csv'
+    if args.input:
+        INPUT_PATH = args.input[0]
 
     UNIQUE_CULTURES = []
     RUN_SINGLE_PREDICTION = False
-
-    MODELS_PATH = "models"
-
-    if args.input:
-        INPUT_FILE = args.input[0]
-
     if args.unique:
-        UNIQUE_CULTURES = [x.lower() for x in sorted(args.unique)]
+        lower = [un.lower() for un in args.unique]
+        UNIQUE_CULTURES = [x.lower() for x in sorted(lower)]
         culture1, culture2 = UNIQUE_CULTURES
         RUN_SINGLE_PREDICTION = True
 
+    OUTPUT_PATH = "."
     if args.output:
         OUTPUT_PATH=args.output[0]
         os.makedirs(OUTPUT_PATH, exist_ok=True)
 
+    MODELS_PATH = "models"
     if args.models:
         MODELS_PATH = args.models[0]
+    # ===============================================================
 
     try:
-        data_to_predict_df = pd.read_csv(INPUT_FILE)
+        data_to_predict_df = pd.read_csv(f"{INPUT_PATH}/{INPUT_FILE}")
     except FileNotFoundError:
         logger.error(f"Error: Data file not found at {INPUT_FILE}")
         return pd.DataFrame()
@@ -251,14 +286,14 @@ def main(args):
     if 'wheat' in list(data_to_predict_df['culture'].unique()):
         data_to_predict_df = data_to_predict_df[data_to_predict_df['culture'] != 'wheat']
 
-    CULTURES_LIST = list(data_to_predict_df['culture'].unique())
+    CULTURES_LIST = ["bean", "maize", "rice", "soybean"]#list(data_to_predict_df['culture'].unique())
 
     PAIRWISE_MODEL_MAP = create_pairwise_model_map(CULTURES_LIST, MODELS_PATH)
 
     if RUN_SINGLE_PREDICTION:
-
         data_to_predict_df = data_to_predict_df[data_to_predict_df['culture'].isin(UNIQUE_CULTURES)]
         cultures_column = data_to_predict_df['culture']
+        filename_column = data_to_predict_df['filename']
         data_to_predict_df.drop(columns=['filename', 'year', 'season', 'culture'], inplace=True)
 
         GENERAL_MODEL_FEATURES = list(data_to_predict_df.columns)
@@ -270,10 +305,13 @@ def main(args):
             PAIRWISE_MODEL_MAP
         )
         final_results_df['culture'] = cultures_column
+        final_results_df['filename'] = filename_column
         final_results_df['result'] = (final_results_df['Final_Prediction'] == final_results_df['culture']).astype(int)
         final_results_df.to_csv(f"{OUTPUT_PATH}/results_{culture1}_{culture2}.csv")
+        write_summary(final_results_df, OUTPUT_PATH, f"{culture1}_{culture2}_summary.txt")
     else:
         cultures_column = data_to_predict_df['culture']
+        filename_column = data_to_predict_df['filename']
         data_to_predict_df.drop(columns=['filename', 'year', 'season', 'culture'], inplace=True)
 
         GENERAL_MODEL_FEATURES = list(data_to_predict_df.columns)
@@ -285,8 +323,10 @@ def main(args):
             PAIRWISE_MODEL_MAP
         )
         final_results_df['culture'] = cultures_column
+        final_results_df['filename'] = filename_column
         final_results_df['result'] = (final_results_df['Final_Prediction'] == final_results_df['culture']).astype(int)
         final_results_df.to_csv(f"{OUTPUT_PATH}/results_cascading.csv")
+        write_summary(final_results_df, OUTPUT_PATH, "cascading_summary.txt")
 
 if __name__ == "__main__":
     main(sys.argv)
