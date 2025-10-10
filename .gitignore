@@ -5,6 +5,8 @@ maize
 bean
 models/
 models*/
+new_Cases/
+*/
 results*
 features_culture
 *.log
