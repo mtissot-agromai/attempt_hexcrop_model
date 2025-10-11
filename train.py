@@ -45,6 +45,7 @@ def save_feature_importance(pipeline: Pipeline, preprocessor: ColumnTransformer,
 
     top_features = feature_importances_series.sort_values(ascending=False)
 
+    os.makedirs(PATH, exist_ok=True)
     top_features.to_csv(f"{PATH}/{FILENAME}", index=True, header=['Importance'], index_label='Feature')
 
 def train_single_model(df: pd.DataFrame, cult1: str, cult2: str, model_path: str, save_csv: bool = True):
@@ -220,6 +221,9 @@ def train_general_model(df: pd.DataFrame, model_path: str, save_csv: bool = True
     scores = cross_val_score(pipeline, X, y, cv=cv, scoring="accuracy")
 
     final_df['Avg Accuracy'] = scores.mean()
+    logger.info(f"Accuracy per fold: {scores}")
+    logger.info(f"Average accuracy: {scores.mean()}")
+    print("\n\n")
 
     if save_csv:
         os.makedirs(f"{model_path}/csvs/", exist_ok=True)
@@ -255,6 +259,7 @@ def main(args):
 
     args = parser.parse_args()
 
+    # ================= Parsing argument ========================
     GENERAL = args.TRAIN_GENERAL_MODEL
     TRAIN_ALL_CULTURES = args.TRAIN_ALL_CULTURES
     SAVE_CSV = args.SAVE_CSV
@@ -276,6 +281,7 @@ def main(args):
 
     if args.input:
         INPUT_PATH = args.input[0]
+    # ===========================================================
 
     PARENT_PATH = '.'
 

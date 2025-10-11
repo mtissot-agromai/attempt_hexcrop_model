@@ -33,8 +33,8 @@ def calculate_features(input_folder: str):
        'B3/B7', 'B3/B8', 'B3/B8A', 'B3/B9', 'B4/B5', 'B4/B6', 'B4/B7', 'B4/B8',
        'B4/B8A', 'B4/B9', 'B5/B6', 'B5/B7', 'B5/B8', 'B5/B8A', 'B5/B9',
        'B6/B7', 'B6/B8', 'B6/B8A', 'B6/B9', 'B7/B8', 'B7/B8A', 'B7/B9',
-       'B8/B8A', 'B8/B9', 'B8A/B9']
-    # data_columns = ["B1", "B2", "B3", "B4", "B5", "B6", "B7", "B8", "B8A", "B9", "B11", "B12", "EVI2", "B1/B11", "B1/B12", "B1/B2", "B1/B3", "B1/B4", "B1/B5", "B1/B6", "B1/B7", "B1/B8", "B1/B9", "B11/B12", "B11/B2", "B11/B3", "B11/B4", "B11/B5", "B11/B6", "B11/B7", "B11/B8", "B11/B9", "B12/B2", "B12/B3", "B12/B4", "B12/B5", "B12/B6", "B12/B7", "B12/B8", "B12/B9", "B2/B3", "B2/B4", "B2/B5", "B2/B6", "B2/B7", "B2/B8", "B2/B9", "B3/B4", "B3/B5", "B3/B6", "B3/B7", "B3/B8", "B3/B9", "B4/B5", "B4/B6", "B4/B7", "B4/B8", "B4/B9", "B5/B6", "B5/B7", "B5/B8", "B5/B9", "B6/B7", "B6/B8", "B6/B9", "B7/B8", "B7/B9", "B8/B9"]
+       'B8/B8A', 'B8/B9', 'B8A/B9', 'OSAVI', 'NDWI','NDMI']
+
     all_feature_rows = []
 
     for root, dirs, files in os.walk(input_folder):
@@ -104,7 +104,10 @@ def calculate_bx_ratios(filepath: str, rewrite: bool = True):
             
             epsilon = 1e-6 
             df[new_col_name] = df[col1] / (df[col2] + epsilon)
-            
+
+        df['OSAVI'] = (df['B8'] - df['B4'])/(df['B8'] + df['B4'] + 1600) # 1.6 * 10000
+        df['NDWI'] = (df['B8'] - df['B11'])/(df['B8'] + df['B11'])
+        df['NDMI'] = (df['B8'] - df['B12'])/(df['B8'] + df['B12'])    
         
         if rewrite:
             df.to_csv(filepath, index=False)
@@ -138,7 +141,7 @@ def create_dataset(input_folder: str, output_path: str, rewrite: bool = True):
 
     return features_df
 
-def split_dataset(df: pd.DataFrame, output_path: str, pct: float):
+def split_dataset(df: pd.DataFrame, output_path: str, pct: float, rseed: int = 123):
     try:
         len_original = len(df)
 
@@ -146,7 +149,7 @@ def split_dataset(df: pd.DataFrame, output_path: str, pct: float):
 
         validation_dataset = (
             df.groupby('culture', group_keys=False)
-            .apply(lambda x: x.sample(frac=pct, random_state=37))
+            .apply(lambda x: x.sample(frac=pct, random_state=rseed))
         )
         
         validation_indices = validation_dataset.index
@@ -183,6 +186,8 @@ def main(args):
 
     parser.add_argument("--input", nargs=1, type=str, help='The path to input folder.')
 
+    parser.add_argument("--rseed", nargs=1, type=int, help='The path to input folder.')
+
     args = parser.parse_args()
 
 
@@ -193,6 +198,10 @@ def main(args):
     if args.output:
         OUTPUT_PATH=args.output[0]
         os.makedirs(OUTPUT_PATH, exist_ok=True)
+
+    rseed = None
+    if args.rseed:
+        rseed = args.rseed[0]
 
     INPUT_FOLDER = "culture_data"
     if args.input:
@@ -208,13 +217,16 @@ def main(args):
             print(f"This is a proportion. It should be between 0 and 1. {VALIDATION_PROPORTION} is bigger than 1. Defaulting to 0.2")
             VALIDATION_PROPORTION = 0.2
 
-    FILENAME = "full_feature_dataset.csv"
+    FILENAME = "full_feature_dataset"
     # ======================================
 
     full_features = create_dataset(INPUT_FOLDER, f"{OUTPUT_PATH}/{FILENAME}.csv", True)
 
     if SPLIT_DATASET:
-        split_dataset(full_features, OUTPUT_PATH, VALIDATION_PROPORTION)
+        if rseed:
+            split_dataset(full_features, OUTPUT_PATH, VALIDATION_PROPORTION, rseed)
+        else:
+            split_dataset(full_features, OUTPUT_PATH, VALIDATION_PROPORTION)
 
 if __name__ == "__main__":
     main(sys.argv)

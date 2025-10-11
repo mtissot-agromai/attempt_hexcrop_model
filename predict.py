@@ -238,7 +238,7 @@ Overall Success Percentage: {global_percent:.2f}%
         with open(f"{output_path}/{filename}", "w") as f:
             f.write(summary_content)
 
-        print(f"Summary generated and saved to {output_path}/{filename}.txt")
+        print(f"Summary generated and saved to {output_path}/{filename}")
 
 def main(args):
     parser = argparse.ArgumentParser(description="Predicting using Hexcrop models.")
@@ -256,6 +256,7 @@ def main(args):
     # ==================== Parsing arguments ========================
     INPUT_PATH = "."
     INPUT_FILE = 'validation_dataset.csv'
+    # INPUT_FILE = "full_feature_dataset.csv"
     if args.input:
         INPUT_PATH = args.input[0]
 
