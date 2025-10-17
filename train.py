@@ -73,8 +73,8 @@ def train_single_model(df: pd.DataFrame, cult1: str, cult2: str, model_path: str
     # 84.5, 83.6, 84.5, 83.7, 85.3, 85.7, 84.4, 83.6, 84.4, 84.0, 84.48
 
     feature_selector = SelectFromModel(
-        estimator=RandomForestClassifier(n_estimators=150, random_state=r_state),
-        max_features=max_features[5]
+        estimator=RandomForestClassifier(n_estimators=150, random_state=r_state)#,
+        # max_features=max_features[5]
     )
 
     preprocessor = ColumnTransformer(
@@ -164,8 +164,8 @@ def train_general_model(df: pd.DataFrame, model_path: str, save_csv: bool = True
     features_for_selection_indices = list(range(0, len(all_features))) 
 
     feature_selector = SelectFromModel(
-        estimator=RandomForestClassifier(n_estimators=100, random_state=r_state),
-        max_features=100 
+        estimator=RandomForestClassifier(n_estimators=100, random_state=r_state)#,
+        # max_features=150 
     )
 
     preprocessor = ColumnTransformer(
@@ -271,8 +271,8 @@ def main(args):
     INPUT_PATH = "."
 
     if args.unique:
-        lower = [un.lower() for un in args.unique]
-        UNIQUE_CULTURES = [x.lower() for x in sorted(lower)]
+        lower_items = [unique_item.lower() for unique_item in args.unique]
+        UNIQUE_CULTURES = [x.lower() for x in sorted(lower_items)]
         GENERAL=False
         TRAIN_ALL_CULTURES=False
 
@@ -287,12 +287,14 @@ def main(args):
 
     features_df = pd.read_csv(f"{INPUT_PATH}/training_dataset.csv")
 
+    CULTURES = list(features_df['culture'].unique())
+
     # ! OPCIONAL: DROPAR TRIGO
-    if 'wheat' in list(features_df['culture'].unique()):
+    if 'wheat' in CULTURES:
         features_df = features_df[features_df['culture'] != 'wheat']
     # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
-    CULTURES = sorted(list(features_df['culture'].unique()))
+    CULTURES = sorted(CULTURES)
 
     if UNIQUE_CULTURES:
         for cult in UNIQUE_CULTURES:
