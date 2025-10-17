@@ -1,0 +1,20 @@
+
+--- Prediction Summary Report ---
+
+Overall Classification Success (Result == 1)
+
+Total Instances: 109
+
+Overall Success Percentage: 75.23%
+
+---------------------------------------------------
+
+## Success Rate by Culture Group
+
+Culture soybean: 88.24%
+Culture rice: 71.43%
+Culture maize: 67.65%
+Culture bean: 40.00%
+
+---------------------------------------------------
+        

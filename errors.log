@@ -1,0 +1,5 @@
+[2025-10-06 10:28:31,876] {train.py:260} ERROR - You entered culture beann, which does not exist on dataframe['cultures'].
+[2025-10-06 16:48:27,546] {predict.py:170} ERROR - Error loading general model: [ONNXRuntimeError] : 3 : NO_SUCHFILE : Load model from models/rice_soybean.onnx failed:Load model models/rice_soybean.onnx failed. File doesn't exist
+[2025-10-07 14:17:35,742] {predict.py:70} ERROR - Error loading general model: [ONNXRuntimeError] : 3 : NO_SUCHFILE : Load model from models3/general_model.onnx failed:Load model models3/general_model.onnx failed. File doesn't exist
+[2025-10-07 14:23:27,439] {predict.py:70} ERROR - Error loading general model: [ONNXRuntimeError] : 3 : NO_SUCHFILE : Load model from models3/general_model.onnx failed:Load model models3/general_model.onnx failed. File doesn't exist
+[2025-10-11 14:01:46,203] {predict.py:284} ERROR - Error: Data file not found at full_feature_dataset.csv
